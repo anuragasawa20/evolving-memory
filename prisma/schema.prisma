@@ -1,0 +1,651 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model InfrastructureTest {
+  id        String   @id @default(uuid())
+  label     String
+  payload   Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("infrastructure_test")
+}
+
+enum DealStage {
+  DISCOVERY
+  QUALIFICATION
+  DEMO
+  PROPOSAL
+  NEGOTIATION
+  CLOSING
+  WON
+  LOST
+}
+
+enum DealStatus {
+  ACTIVE
+  WON
+  LOST
+}
+
+enum FactCategory {
+  PAIN_POINT
+  OBJECTION
+  BUYING_SIGNAL
+  REQUIREMENT
+  COMMITMENT
+  STAKEHOLDER
+  BUDGET
+  TIMELINE
+  DECISION_CRITERIA
+  OTHER
+}
+
+enum AnalysisStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum MemorySyncStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum MemoryRelationshipType {
+  BELONGS_TO
+  DISCOVERED_IN
+  RELATED_TO
+  ADDRESSES
+  UPDATED_BY
+  INFLUENCED
+  CONFIRMS
+  CONTRADICTS
+}
+
+enum RelationshipOrigin {
+  EXPLICIT
+  INFERRED
+}
+
+enum MemoryLearningAction {
+  CREATED
+  CONFIRMED
+  REFINED
+  CONTRADICTED
+}
+
+enum RecommendationStatus {
+  SUGGESTED
+  ACCEPTED
+  MODIFIED
+  DISMISSED
+  EXECUTED
+  OUTCOME_PENDING
+  OUTCOME_RECORDED
+}
+
+enum TimelineEventType {
+  CALL_ANALYZED
+  MEMORY_CREATED
+  MEMORY_CONFIRMED
+  MEMORY_REFINED
+  MEMORY_CONTRADICTED
+  TECHNIQUE_ADDED
+  RECOMMENDATION_GENERATED
+  MEMORY_SYNCED
+  MEMORY_SYNC_FAILED
+}
+
+enum SalespersonRole {
+  ADMIN
+  SALES_REP
+}
+
+enum CaseSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum StrategyScope {
+  PERSONAL
+  ORGANIZATIONAL
+}
+
+enum ExecutionSource {
+  DEALOS_RECOMMENDED
+  SALESPERSON_INDEPENDENT
+  UNKNOWN
+}
+
+enum StrategyExecutionStatus {
+  SUGGESTED
+  ACCEPTED
+  MODIFIED
+  DISMISSED
+  EXECUTED
+  OUTCOME_PENDING
+  OUTCOME_RECORDED
+}
+
+enum OutcomeType {
+  POSITIVE_RESPONSE
+  MEETING_BOOKED
+  DEMO_ACCEPTED
+  PROPOSAL_REQUESTED
+  OBJECTION_RESOLVED
+  DEAL_ADVANCED
+  DEAL_WON
+  DEAL_LOST
+  NO_CHANGE
+  UNKNOWN
+}
+
+enum PlaybookStatus {
+  DRAFT
+  EVIDENCE_ACCUMULATING
+  REVIEW_REQUIRED
+  APPROVED
+  ACTIVE
+  REVISED
+  ARCHIVED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum OrganizationEntityType {
+  CASE_INSTANCE
+  PLAYBOOK_VERSION
+  PERSONAL_TECHNIQUE
+}
+
+model Deal {
+  id           String     @id @default(uuid()) @db.Uuid
+  customerName String
+  productName  String
+  description  String?    @db.Text
+  stage        DealStage  @default(DISCOVERY)
+  status       DealStatus @default(ACTIVE)
+  isSynthetic  Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  calls           Call[]
+  facts           ExtractedFact[]
+  memorySyncs     MemorySync[]
+  learningEvents  MemoryLearningEvent[]
+  recommendations Recommendation[]
+  timelineEvents  TimelineEvent[]
+  techniques      PersonalTechnique[]
+  caseInstances   CaseInstance[]
+
+  @@index([updatedAt])
+}
+
+model Call {
+  id             String         @id @default(uuid()) @db.Uuid
+  dealId         String         @db.Uuid
+  title          String?
+  callDate       DateTime?
+  transcript     String         @db.Text
+  summary        String?        @db.Text
+  callNumber     Int
+  analysisStatus AnalysisStatus @default(PENDING)
+  analysisError  String?        @db.Text
+  suggestedStage DealStage?
+  stageReasoning String?        @db.Text
+  createdAt      DateTime       @default(now())
+
+  deal                Deal                  @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  facts               ExtractedFact[]
+  memorySync          MemorySync?
+  memoryVersions      MemoryVersion[]
+  memoryRelationships MemoryRelationship[]
+  learningEvents      MemoryLearningEvent[]
+  recommendations     Recommendation[]
+  timelineEvents      TimelineEvent[]       @relation("TimelineSourceCall")
+  caseInstances       CaseInstance[]
+  strategyOutcomes    StrategyOutcome[]
+
+  @@unique([dealId, callNumber])
+  @@index([dealId])
+}
+
+model ExtractedFact {
+  id         String       @id @default(uuid()) @db.Uuid
+  callId     String       @db.Uuid
+  dealId     String       @db.Uuid
+  category   FactCategory
+  content    String       @db.Text
+  evidence   String?      @db.Text
+  confidence Decimal?     @db.Decimal(4, 2)
+  isInferred Boolean      @default(false)
+  metadata   Json?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @default(now()) @updatedAt
+
+  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  versions            MemoryVersion[]
+  sourceRelationships MemoryRelationship[]   @relation("MemoryRelationshipSource")
+  targetRelationships MemoryRelationship[]   @relation("MemoryRelationshipTarget")
+  learningEvents      MemoryLearningEvent[]
+  recommendationLinks RecommendationMemory[]
+  timelineEvents      TimelineEvent[]        @relation("TimelineSourceMemory")
+  techniques          PersonalTechnique[]
+
+  @@index([dealId])
+  @@index([callId])
+  @@index([dealId, category])
+}
+
+model MemoryVersion {
+  id            String       @id @default(uuid()) @db.Uuid
+  memoryId      String       @db.Uuid
+  versionNumber Int
+  content       String       @db.Text
+  evidence      String?      @db.Text
+  memoryType    FactCategory
+  confidence    Decimal?     @db.Decimal(4, 2)
+  sourceCallId  String?      @db.Uuid
+  changeReason  String?      @db.Text
+  createdAt     DateTime     @default(now())
+
+  memory                 ExtractedFact         @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+  sourceCall             Call?                 @relation(fields: [sourceCallId], references: [id], onDelete: SetNull)
+  previousLearningEvents MemoryLearningEvent[] @relation("LearningPreviousVersion")
+  newLearningEvents      MemoryLearningEvent[] @relation("LearningNewVersion")
+
+  @@unique([memoryId, versionNumber])
+  @@index([memoryId])
+  @@index([sourceCallId])
+}
+
+model MemoryRelationship {
+  id               String                 @id @default(uuid()) @db.Uuid
+  sourceMemoryId   String                 @db.Uuid
+  targetMemoryId   String                 @db.Uuid
+  relationshipType MemoryRelationshipType
+  origin           RelationshipOrigin     @default(EXPLICIT)
+  explanation      String?                @db.Text
+  sourceCallId     String?                @db.Uuid
+  createdAt        DateTime               @default(now())
+
+  sourceMemory ExtractedFact @relation("MemoryRelationshipSource", fields: [sourceMemoryId], references: [id], onDelete: Cascade)
+  targetMemory ExtractedFact @relation("MemoryRelationshipTarget", fields: [targetMemoryId], references: [id], onDelete: Cascade)
+  sourceCall   Call?         @relation(fields: [sourceCallId], references: [id], onDelete: SetNull)
+
+  @@unique([sourceMemoryId, targetMemoryId, relationshipType])
+  @@index([sourceMemoryId])
+  @@index([targetMemoryId])
+}
+
+model MemoryLearningEvent {
+  id                String               @id @default(uuid()) @db.Uuid
+  dealId            String               @db.Uuid
+  memoryId          String               @db.Uuid
+  sourceCallId      String?              @db.Uuid
+  action            MemoryLearningAction
+  previousVersionId String?              @db.Uuid
+  newVersionId      String?              @db.Uuid
+  reason            String?              @db.Text
+  createdAt         DateTime             @default(now())
+
+  deal            Deal           @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  memory          ExtractedFact  @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+  sourceCall      Call?          @relation(fields: [sourceCallId], references: [id], onDelete: SetNull)
+  previousVersion MemoryVersion? @relation("LearningPreviousVersion", fields: [previousVersionId], references: [id], onDelete: SetNull)
+  newVersion      MemoryVersion? @relation("LearningNewVersion", fields: [newVersionId], references: [id], onDelete: SetNull)
+
+  @@index([dealId])
+  @@index([memoryId])
+  @@index([sourceCallId])
+}
+
+model Recommendation {
+  id        String               @id @default(uuid()) @db.Uuid
+  dealId    String               @db.Uuid
+  callId    String?              @db.Uuid
+  content   String               @db.Text
+  reasoning String?              @db.Text
+  status    RecommendationStatus @default(SUGGESTED)
+  metadata  Json?
+  createdAt DateTime             @default(now())
+
+  deal Deal  @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  call Call? @relation(fields: [callId], references: [id], onDelete: SetNull)
+
+  memories           RecommendationMemory[]
+  timelineEvents     TimelineEvent[]
+  caseInstance       CaseInstance?          @relation(fields: [caseInstanceId], references: [id])
+  caseInstanceId     String?                @db.Uuid
+  strategyExecutions StrategyExecution[]
+  playbookVersion    PlaybookVersion?       @relation(fields: [playbookVersionId], references: [id])
+  playbookVersionId  String?                @db.Uuid
+
+  @@index([dealId])
+  @@index([callId])
+  @@index([dealId, createdAt])
+}
+
+model RecommendationMemory {
+  recommendationId String  @db.Uuid
+  memoryId         String  @db.Uuid
+  contribution     String? @db.Text
+
+  recommendation Recommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+  memory         ExtractedFact  @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+
+  @@id([recommendationId, memoryId])
+  @@index([memoryId])
+}
+
+model TimelineEvent {
+  id               String            @id @default(uuid()) @db.Uuid
+  dealId           String            @db.Uuid
+  eventType        TimelineEventType
+  title            String
+  description      String?           @db.Text
+  sourceCallId     String?           @db.Uuid
+  sourceMemoryId   String?           @db.Uuid
+  recommendationId String?           @db.Uuid
+  metadata         Json?
+  createdAt        DateTime          @default(now())
+
+  deal           Deal            @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  sourceCall     Call?           @relation("TimelineSourceCall", fields: [sourceCallId], references: [id], onDelete: SetNull)
+  sourceMemory   ExtractedFact?  @relation("TimelineSourceMemory", fields: [sourceMemoryId], references: [id], onDelete: SetNull)
+  recommendation Recommendation? @relation(fields: [recommendationId], references: [id], onDelete: SetNull)
+
+  @@index([dealId, createdAt])
+  @@index([sourceCallId])
+  @@index([sourceMemoryId])
+  @@index([recommendationId])
+}
+
+model PersonalTechnique {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String?  @db.Uuid
+  dealId         String?  @db.Uuid
+  memoryId       String?  @db.Uuid
+  name           String
+  description    String   @db.Text
+  source         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization?  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  deal         Deal?          @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  linkedMemory ExtractedFact? @relation(fields: [memoryId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([dealId])
+  @@index([memoryId])
+}
+
+model MemorySync {
+  id            String           @id @default(uuid()) @db.Uuid
+  callId        String           @unique @db.Uuid
+  dealId        String           @db.Uuid
+  namespace     String
+  status        MemorySyncStatus @default(PENDING)
+  attempts      Int              @default(0)
+  jobReferences Json?
+  errorMessage  String?          @db.Text
+  syncedAt      DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId])
+  @@index([status])
+}
+
+model Organization {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  salespeople   Salesperson[]
+  caseInstances CaseInstance[]
+  strategies    Strategy[]
+  playbooks     OrganizationalPlaybook[]
+  memorySyncs   OrganizationMemorySync[]
+  techniques    PersonalTechnique[]
+}
+
+model Salesperson {
+  id             String          @id @default(uuid()) @db.Uuid
+  organizationId String          @db.Uuid
+  name           String
+  email          String?
+  role           SalespersonRole @default(SALES_REP)
+  createdAt      DateTime        @default(now())
+
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  caseInstances      CaseInstance[]
+  strategyExecutions StrategyExecution[]
+  approvedVersions   PlaybookVersion[]   @relation("PlaybookApprovedBy")
+
+  @@index([organizationId])
+}
+
+model CaseCategory {
+  id               String   @id @default(uuid()) @db.Uuid
+  code             String   @unique
+  name             String
+  description      String   @db.Text
+  parentCategoryId String?  @db.Uuid
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+
+  parentCategory  CaseCategory?            @relation("CaseCategoryHierarchy", fields: [parentCategoryId], references: [id], onDelete: SetNull)
+  childCategories CaseCategory[]           @relation("CaseCategoryHierarchy")
+  caseInstances   CaseInstance[]
+  playbooks       OrganizationalPlaybook[]
+
+  @@index([parentCategoryId])
+}
+
+model CaseInstance {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String        @db.Uuid
+  dealId         String        @db.Uuid
+  callId         String        @db.Uuid
+  salespersonId  String?       @db.Uuid
+  categoryId     String        @db.Uuid
+  subtype        String
+  description    String        @db.Text
+  evidence       String?       @db.Text
+  confidence     Decimal?      @db.Decimal(4, 2)
+  dealStage      DealStage?
+  severity       CaseSeverity?
+  isSynthetic    Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  deal         Deal          @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  call         Call          @relation(fields: [callId], references: [id], onDelete: Cascade)
+  salesperson  Salesperson?  @relation(fields: [salespersonId], references: [id], onDelete: SetNull)
+  category     CaseCategory  @relation(fields: [categoryId], references: [id])
+
+  executions       StrategyExecution[]
+  playbookEvidence PlaybookEvidence[]
+  recommendations  Recommendation[]
+
+  @@index([organizationId])
+  @@index([dealId])
+  @@index([callId])
+  @@index([categoryId, subtype])
+}
+
+model Strategy {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String        @db.Uuid
+  name           String
+  description    String        @db.Text
+  strategyType   String
+  scope          StrategyScope @default(ORGANIZATIONAL)
+  createdById    String?       @db.Uuid
+  createdAt      DateTime      @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  executions       StrategyExecution[]
+  playbookVersions PlaybookVersion[]
+
+  @@index([organizationId])
+  @@index([organizationId, name])
+}
+
+model StrategyExecution {
+  id               String                  @id @default(uuid()) @db.Uuid
+  caseInstanceId   String                  @db.Uuid
+  strategyId       String                  @db.Uuid
+  recommendationId String?                 @db.Uuid
+  salespersonId    String?                 @db.Uuid
+  executionStatus  StrategyExecutionStatus @default(EXECUTED)
+  decisionSource   ExecutionSource         @default(UNKNOWN)
+  actualApproach   String                  @db.Text
+  executedAt       DateTime?
+  isSynthetic      Boolean                 @default(false)
+  createdAt        DateTime                @default(now())
+
+  caseInstance   CaseInstance    @relation(fields: [caseInstanceId], references: [id], onDelete: Cascade)
+  strategy       Strategy        @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  recommendation Recommendation? @relation(fields: [recommendationId], references: [id], onDelete: SetNull)
+  salesperson    Salesperson?    @relation(fields: [salespersonId], references: [id], onDelete: SetNull)
+
+  outcomes         StrategyOutcome[]
+  playbookEvidence PlaybookEvidence[]
+
+  @@index([caseInstanceId])
+  @@index([strategyId])
+  @@index([recommendationId])
+}
+
+model StrategyOutcome {
+  id                  String      @id @default(uuid()) @db.Uuid
+  strategyExecutionId String      @db.Uuid
+  outcomeType         OutcomeType
+  evidence            String?     @db.Text
+  sourceCallId        String?     @db.Uuid
+  observedAt          DateTime    @default(now())
+  isInferred          Boolean     @default(false)
+  isSynthetic         Boolean     @default(false)
+  createdAt           DateTime    @default(now())
+
+  strategyExecution StrategyExecution @relation(fields: [strategyExecutionId], references: [id], onDelete: Cascade)
+  sourceCall        Call?             @relation(fields: [sourceCallId], references: [id], onDelete: SetNull)
+
+  @@index([strategyExecutionId])
+  @@index([sourceCallId])
+}
+
+model OrganizationalPlaybook {
+  id             String         @id @default(uuid()) @db.Uuid
+  organizationId String         @db.Uuid
+  caseCategoryId String         @db.Uuid
+  subtype        String
+  title          String
+  description    String         @db.Text
+  status         PlaybookStatus @default(DRAFT)
+  currentVersion Int            @default(0)
+  isSynthetic    Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  caseCategory CaseCategory @relation(fields: [caseCategoryId], references: [id])
+
+  versions PlaybookVersion[]
+
+  @@index([organizationId])
+  @@index([caseCategoryId, subtype])
+}
+
+model PlaybookVersion {
+  id                    String         @id @default(uuid()) @db.Uuid
+  playbookId            String         @db.Uuid
+  version               Int
+  recommendedStrategyId String?        @db.Uuid
+  guidance              String         @db.Text
+  conditions            String         @db.Text
+  exceptions            String         @db.Text
+  evidenceSummary       String         @db.Text
+  confidence            Decimal?       @db.Decimal(4, 2)
+  approvalStatus        ApprovalStatus @default(PENDING)
+  approvedById          String?        @db.Uuid
+  approvedAt            DateTime?
+  isSynthetic           Boolean        @default(false)
+  createdAt             DateTime       @default(now())
+
+  playbook            OrganizationalPlaybook @relation(fields: [playbookId], references: [id], onDelete: Cascade)
+  recommendedStrategy Strategy?              @relation(fields: [recommendedStrategyId], references: [id], onDelete: SetNull)
+  approvedBy          Salesperson?           @relation("PlaybookApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  evidence        PlaybookEvidence[]
+  recommendations Recommendation[]
+
+  @@unique([playbookId, version])
+  @@index([playbookId])
+  @@index([approvalStatus])
+}
+
+model PlaybookEvidence {
+  id                  String   @id @default(uuid()) @db.Uuid
+  playbookVersionId   String   @db.Uuid
+  caseInstanceId      String?  @db.Uuid
+  strategyExecutionId String?  @db.Uuid
+  evidenceType        String
+  createdAt           DateTime @default(now())
+
+  playbookVersion   PlaybookVersion    @relation(fields: [playbookVersionId], references: [id], onDelete: Cascade)
+  caseInstance      CaseInstance?      @relation(fields: [caseInstanceId], references: [id], onDelete: SetNull)
+  strategyExecution StrategyExecution? @relation(fields: [strategyExecutionId], references: [id], onDelete: SetNull)
+
+  @@index([playbookVersionId])
+  @@index([caseInstanceId])
+  @@index([strategyExecutionId])
+}
+
+model OrganizationMemorySync {
+  id             String                 @id @default(uuid()) @db.Uuid
+  organizationId String                 @db.Uuid
+  entityType     OrganizationEntityType
+  entityId       String                 @db.Uuid
+  namespace      String
+  status         MemorySyncStatus       @default(PENDING)
+  attempts       Int                    @default(0)
+  blobReferences Json?
+  errorMessage   String?                @db.Text
+  syncedAt       DateTime?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([entityType, entityId, namespace])
+  @@index([organizationId])
+  @@index([status])
+  @@index([entityType])
+}

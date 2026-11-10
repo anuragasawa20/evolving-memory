@@ -1,0 +1,54 @@
+{
+  "name": "walrus_hackathon",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "RUN_WALRUS_INTEGRATION=1 vitest run tests/integration",
+    "test:phase2": "RUN_PHASE2_INTEGRATION=1 vitest run tests/integration/phase2.integration.test.ts",
+    "health": "node scripts/health-check.mjs",
+    "db:roundtrip": "node scripts/db-persistence.mjs roundtrip",
+    "db:persist:insert": "node scripts/db-persistence.mjs insert",
+    "db:persist:verify": "node scripts/db-persistence.mjs verify",
+    "memory:inspect": "node scripts/memory-inspect.mjs",
+    "demo:preflight": "node scripts/demo-preflight.mjs"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@mysten-incubation/memwal": "^0.1.14",
+    "@mysten/seal": "^1.5.4",
+    "@mysten/sui": "^2.39.1",
+    "@prisma/client": "^6.19.3",
+    "@xyflow/react": "^12.12.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.70.0",
+    "next": "16.4.5",
+    "openai": "^6.49.0",
+    "prisma": "^6.19.3",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "tailwind-merge": "^3.7.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.5",
+    "@tailwindcss/turbopack": "^4",
+    "@types/node": "^22.20.5",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.5",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "^5.1.0"
+  },
+  "description": "DealOS \u2014 experience-driven sales intelligence with deal, personal, and organizational memory on Walrus."
+}
